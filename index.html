@@ -1,0 +1,730 @@
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Explorador 3D de cuerpos geométricos</title>
+
+<!-- Three.js: versión fija para mantener la compatibilidad -->
+<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+
+<style>
+:root {
+  --azul: #175cd3;
+  --fondo: #f3f7ff;
+  --texto: #172b4d;
+  --verde: #16804a;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  color: var(--texto);
+  background: var(--fondo);
+  font-size: 18px;
+}
+header {
+  background: #174ea6;
+  color: white;
+  padding: 18px;
+  text-align: center;
+}
+header h1 { margin: 0 0 8px; font-size: 28px; }
+header p { margin: 0; }
+main { max-width: 1250px; margin: auto; padding: 16px; }
+.panel {
+  background: white;
+  border-radius: 14px;
+  padding: 16px;
+  margin-bottom: 14px;
+  box-shadow: 0 2px 8px #17365d15;
+}
+h2 { font-size: 22px; margin-top: 0; }
+button, select {
+  font: inherit;
+  min-height: 50px;
+  padding: 10px 14px;
+  border: 2px solid #c7d7f5;
+  border-radius: 10px;
+  background: white;
+  color: var(--texto);
+  cursor: pointer;
+}
+button:hover, select:hover { border-color: var(--azul); }
+button:focus-visible, select:focus-visible {
+  outline: 3px solid #ffbf47;
+  outline-offset: 2px;
+}
+button.primary { background: var(--azul); color: white; border-color: var(--azul); }
+button.active { background: #dceaff; border-color: var(--azul); }
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.7fr) minmax(260px, 1fr);
+  gap: 14px;
+}
+#visor {
+  width: 100%;
+  height: 430px;
+  background: #eaf3ff;
+  border-radius: 12px;
+  overflow: hidden;
+  position: relative;
+  touch-action: none;
+}
+#visor canvas { display: block; width: 100%; height: 100%; }
+#ayuda {
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  background: #ffffffeb;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 15px;
+  pointer-events: none;
+}
+#nombreModelo { font-size: 25px; margin-bottom: 8px; }
+#descripcion { line-height: 1.5; }
+#partes { line-height: 1.8; padding-left: 22px; }
+.dato {
+  background: #fff8db;
+  border-left: 5px solid #e6a700;
+  padding: 12px;
+  margin: 8px 0;
+  border-radius: 6px;
+}
+.pregunta {
+  border: 1px solid #d7e2f5;
+  padding: 14px;
+  border-radius: 12px;
+  margin: 12px 0;
+}
+.pregunta p { margin-top: 0; font-weight: bold; }
+.opciones { display: flex; flex-wrap: wrap; gap: 8px; }
+.opciones button { flex: 1 1 150px; }
+.feedback { min-height: 28px; margin: 10px 0 0; font-weight: bold; }
+.correcto { color: var(--verde); }
+.error { color: #b42318; }
+#estado { font-weight: bold; }
+footer { text-align: center; padding: 18px; font-size: 15px; }
+
+@media (max-width: 760px) {
+  .layout { grid-template-columns: 1fr; }
+  #visor { height: 340px; }
+  header h1 { font-size: 23px; }
+  main { padding: 10px; }
+  button, select { flex-grow: 1; }
+}
+</style>
+</head>
+
+<body>
+<header>
+  <h1>🔎 Explorador 3D de cuerpos geométricos</h1>
+  <p>¡Gira, observa y descubre las formas!</p>
+</header>
+
+<main>
+  <section class="panel">
+    <h2>1. Elige un cuerpo geométrico</h2>
+    <div class="controls" id="selector">
+      <button class="primary" data-tipo="cubo">Cubo</button>
+      <button data-tipo="prisma">Prisma rectangular</button>
+      <button data-tipo="piramide">Pirámide</button>
+      <button data-tipo="cilindro">Cilindro</button>
+      <button data-tipo="cono">Cono</button>
+      <button data-tipo="esfera">Esfera</button>
+    </div>
+  </section>
+
+  <div class="layout">
+    <section class="panel">
+      <h2>2. Explora el modelo</h2>
+      <div id="visor" aria-label="Modelo tridimensional interactivo">
+        <div id="ayuda">Arrastra para girar · Pellizca o usa la rueda para acercar</div>
+      </div>
+      <p id="estado" aria-live="polite">Modelo: cubo</p>
+      <div class="controls">
+        <button id="etiquetas" class="active">Ocultar etiquetas</button>
+        <button id="aristas">Mostrar aristas</button>
+        <button id="vertices">Mostrar vértices</button>
+        <button id="separar">Separar partes</button>
+        <button id="rotar">Detener giro automático</button>
+        <button id="reiniciar">Reiniciar vista</button>
+      </div>
+      <div id="panelPartes">
+        <h2>Partes y características</h2>
+        <ul id="partes"></ul>
+      </div>
+    </section>
+
+    <aside>
+      <section class="panel">
+        <h2>¿Qué observamos?</h2>
+        <h3 id="nombreModelo">El cubo</h3>
+        <p id="descripcion"></p>
+        <h2>¿Sabías que…?</h2>
+        <div id="datos"></div>
+      </section>
+
+      <section class="panel">
+        <h2>3. Mini reto</h2>
+        <p>Observa el modelo y elige una respuesta.</p>
+        <div id="reto"></div>
+        <p id="resultadoReto" aria-live="polite"></p>
+        <button id="reiniciarReto" class="primary">Volver a intentar</button>
+      </section>
+    </aside>
+  </div>
+</main>
+
+<footer>Recurso educativo interactivo · Matemática · Educación Primaria</footer>
+
+<script>
+(() => {
+"use strict";
+
+// =======================================================
+// ZONA DOCENTE: aquí puedes modificar nombres, datos,
+// descripciones, preguntas y colores de los modelos.
+// =======================================================
+const contenidos = {
+  cubo: {
+    nombre: "El cubo",
+    color: 0x2878e8,
+    descripcion: "Tiene 6 caras cuadradas, 12 aristas y 8 vértices.",
+    partes: ["6 caras cuadradas", "12 aristas", "8 vértices"],
+    datos: [
+      "Un dado común tiene forma de cubo.",
+      "Todas las caras del cubo tienen el mismo tamaño.",
+      "El cubo tiene 6 caras planas."
+    ],
+    preguntas: [
+      { p: "¿Cuántas caras tiene un cubo?", o: ["4", "6", "8"], r: 1,
+        bien: "¡Muy bien! El cubo tiene 6 caras.",
+        mal: "Cuenta las caras planas del cubo." },
+      { p: "¿Cuántos vértices tiene?", o: ["8", "6", "12"], r: 0,
+        bien: "¡Correcto! Tiene 8 vértices.",
+        mal: "Observa las esquinas del cubo." },
+      { p: "¿Qué forma tienen sus caras?", o: ["Círculos", "Triángulos", "Cuadrados"], r: 2,
+        bien: "¡Excelente! Sus caras son cuadrados.",
+        mal: "Mira una de las caras del cubo." }
+    ]
+  },
+  prisma: {
+    nombre: "El prisma rectangular",
+    color: 0x18a999,
+    descripcion: "Tiene 6 caras rectangulares, 12 aristas y 8 vértices.",
+    partes: ["6 caras rectangulares", "12 aristas", "8 vértices"],
+    datos: [
+      "Una caja de zapatos suele tener esta forma.",
+      "Sus caras opuestas son iguales.",
+      "Tiene caras planas y no tiene superficies curvas."
+    ],
+    preguntas: [
+      { p: "¿Cuántas caras tiene?", o: ["6", "8", "4"], r: 0,
+        bien: "¡Muy bien! Tiene 6 caras.",
+        mal: "Observa la parte superior, inferior y los lados." },
+      { p: "¿Cuántos vértices tiene?", o: ["12", "8", "6"], r: 1,
+        bien: "¡Correcto! Tiene 8 vértices.",
+        mal: "Cuenta las esquinas del prisma." },
+      { p: "¿Qué objeto se parece a este cuerpo?", o: ["Una pelota", "Un cono de helado", "Una caja de zapatos"], r: 2,
+        bien: "¡Excelente! Una caja de zapatos suele tener esa forma.",
+        mal: "Busca un objeto con forma de caja." }
+    ]
+  },
+  piramide: {
+    nombre: "La pirámide de base cuadrada",
+    color: 0xf29f05,
+    descripcion: "Tiene una base cuadrada, 4 caras triangulares, 8 aristas y 5 vértices.",
+    partes: ["1 base cuadrada", "4 caras triangulares", "8 aristas", "5 vértices"],
+    datos: [
+      "La base de este modelo es un cuadrado.",
+      "Las cuatro caras laterales son triángulos.",
+      "Las caras laterales se unen en una punta."
+    ],
+    preguntas: [
+      { p: "¿Qué forma tiene la base?", o: ["Cuadrado", "Círculo", "Triángulo"], r: 0,
+        bien: "¡Muy bien! La base es cuadrada.",
+        mal: "Observa la cara de abajo." },
+      { p: "¿Cuántas caras triangulares tiene?", o: ["2", "4", "6"], r: 1,
+        bien: "¡Correcto! Tiene 4 caras triangulares.",
+        mal: "Cuenta las caras que llegan a la punta." },
+      { p: "¿Cuántos vértices tiene?", o: ["5", "8", "4"], r: 0,
+        bien: "¡Excelente! Tiene 5 vértices.",
+        mal: "Cuenta las cuatro esquinas de la base y la punta." }
+    ]
+  },
+  cilindro: {
+    nombre: "El cilindro",
+    color: 0x8b5cf6,
+    descripcion: "Tiene 2 bases circulares planas y una superficie lateral curva.",
+    partes: ["2 bases circulares", "1 superficie lateral curva", "2 bordes circulares"],
+    datos: [
+      "Una lata suele tener forma de cilindro.",
+      "Puede rodar sobre su superficie curva.",
+      "Sus dos bases son círculos iguales."
+    ],
+    preguntas: [
+      { p: "¿Cuántas bases circulares tiene?", o: ["1", "2", "3"], r: 1,
+        bien: "¡Muy bien! Tiene 2 bases circulares.",
+        mal: "Observa arriba y abajo del cilindro." },
+      { p: "¿Tiene una superficie curva?", o: ["Sí", "No", "Solo si es pequeño"], r: 0,
+        bien: "¡Correcto! Tiene una superficie lateral curva.",
+        mal: "Observa la parte que rodea el cilindro." },
+      { p: "¿Qué objeto se parece a un cilindro?", o: ["Una lata", "Un dado", "Una pirámide"], r: 0,
+        bien: "¡Excelente! Una lata suele tener forma cilíndrica.",
+        mal: "Piensa en un envase con dos bases circulares." }
+    ]
+  },
+  cono: {
+    nombre: "El cono",
+    color: 0xef6b45,
+    descripcion: "Tiene una base circular, una superficie lateral curva y una punta llamada vértice.",
+    partes: ["1 base circular", "1 superficie lateral curva", "1 vértice o punta", "1 borde circular"],
+    datos: [
+      "Un cono de tránsito tiene forma de cono.",
+      "El cono termina en una punta.",
+      "Su base tiene forma de círculo."
+    ],
+    preguntas: [
+      { p: "¿Qué forma tiene la base?", o: ["Cuadrado", "Círculo", "Triángulo"], r: 1,
+        bien: "¡Muy bien! La base es circular.",
+        mal: "Mira la base del cono desde arriba." },
+      { p: "¿Cómo se llama su punta?", o: ["Base", "Cara", "Vértice"], r: 2,
+        bien: "¡Correcto! La punta es un vértice.",
+        mal: "Recuerda el nombre geométrico de una esquina o punta." },
+      { p: "¿Qué objeto se parece a un cono?", o: ["Una pelota", "Un cono de tránsito", "Una caja"], r: 1,
+        bien: "¡Excelente! El cono de tránsito tiene forma cónica.",
+        mal: "Busca un objeto con base circular y punta." }
+    ]
+  },
+  esfera: {
+    nombre: "La esfera",
+    color: 0xe34b87,
+    descripcion: "Es un cuerpo redondo cuya superficie es curva. No tiene caras planas, aristas ni vértices.",
+    partes: ["Superficie curva", "0 caras planas", "0 aristas", "0 vértices"],
+    datos: [
+      "Una pelota es un ejemplo aproximado de esfera.",
+      "La esfera puede rodar en distintas direcciones.",
+      "Su superficie no tiene esquinas."
+    ],
+    preguntas: [
+      { p: "¿Tiene caras planas?", o: ["Sí, 2", "Sí, 6", "No"], r: 2,
+        bien: "¡Muy bien! La esfera no tiene caras planas.",
+        mal: "Observa que toda su superficie es curva." },
+      { p: "¿Tiene vértices?", o: ["No", "Sí, 4", "Sí, 1"], r: 0,
+        bien: "¡Correcto! La esfera no tiene vértices.",
+        mal: "Busca una punta o esquina: la esfera no tiene." },
+      { p: "¿Qué objeto se parece a una esfera?", o: ["Una caja", "Una pelota", "Una lata"], r: 1,
+        bien: "¡Excelente! Una pelota se parece a una esfera.",
+        mal: "Piensa en un objeto redondo que pueda rodar." }
+    ]
+  }
+};
+
+// Configuración de Three.js.
+const visor = document.getElementById("visor");
+const escena = new THREE.Scene();
+escena.background = new THREE.Color(0xeaf3ff);
+
+const camara = new THREE.PerspectiveCamera(
+  45, visor.clientWidth / visor.clientHeight, 0.1, 100
+);
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
+renderer.setSize(visor.clientWidth, visor.clientHeight);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+visor.appendChild(renderer.domElement);
+
+escena.add(new THREE.HemisphereLight(0xffffff, 0x8293ad, 2));
+const luz = new THREE.DirectionalLight(0xffffff, 2.2);
+luz.position.set(4, 7, 6);
+escena.add(luz);
+
+const grupo = new THREE.Group();
+escena.add(grupo);
+
+let tipoActual = "cubo";
+let mostrarAristas = false;
+let mostrarVertices = false;
+let mostrarEtiquetas = true;
+let giroAutomatico = true;
+let separado = false;
+let arrastrando = false;
+let inicioX = 0, inicioY = 0;
+let giroX = -0.35, giroY = 0.55;
+let distancia = 6;
+let preguntasRespondidas = new Set();
+let aciertos = 0;
+
+// Crea un material con color sólido y sin texturas pesadas.
+function material(color) {
+  return new THREE.MeshStandardMaterial({
+    color,
+    roughness: 0.68,
+    metalness: 0.02,
+    flatShading: false
+  });
+}
+
+// Añade el cuerpo y una línea fina que marca sus bordes geométricos.
+function agregarCuerpo(geometria, color, nombre) {
+  const malla = new THREE.Mesh(geometria, material(color));
+  malla.name = nombre;
+  grupo.add(malla);
+  return malla;
+}
+
+function agregarAristas(malla) {
+  const lineas = new THREE.LineSegments(
+    new THREE.EdgesGeometry(malla.geometry, 25),
+    new THREE.LineBasicMaterial({ color: 0x172b4d })
+  );
+  lineas.name = "aristas";
+  lineas.userData.capa = true;
+  malla.add(lineas);
+  lineas.visible = mostrarAristas;
+}
+
+// Coloca pequeños puntos en los vértices conocidos de poliedros.
+function agregarPuntos(coordenadas) {
+  const geometria = new THREE.SphereGeometry(0.065, 8, 6);
+  coordenadas.forEach(p => {
+    const punto = new THREE.Mesh(
+      geometria,
+      new THREE.MeshBasicMaterial({ color: 0x172b4d })
+    );
+    punto.position.set(p[0], p[1], p[2]);
+    punto.name = "vertice";
+    punto.userData.capa = true;
+    punto.visible = mostrarVertices;
+    grupo.add(punto);
+  });
+}
+
+function limpiarGrupo() {
+  while (grupo.children.length) {
+    const objeto = grupo.children.pop();
+    grupo.remove(objeto);
+    objeto.traverse(hijo => {
+      if (hijo.geometry) hijo.geometry.dispose();
+      if (hijo.material) {
+        if (Array.isArray(hijo.material)) hijo.material.forEach(m => m.dispose());
+        else hijo.material.dispose();
+      }
+    });
+  }
+}
+
+function crearModelo(tipo) {
+  limpiarGrupo();
+  tipoActual = tipo;
+  separado = false;
+  document.getElementById("separar").textContent = "Separar partes";
+
+  const c = contenidos[tipo].color;
+  let malla;
+  let vertices = [];
+
+  if (tipo === "cubo") {
+    malla = agregarCuerpo(new THREE.BoxGeometry(2, 2, 2), c, "cubo");
+    vertices = [
+      [-1,-1,-1],[-1,-1,1],[-1,1,-1],[-1,1,1],
+      [1,-1,-1],[1,-1,1],[1,1,-1],[1,1,1]
+    ];
+  } else if (tipo === "prisma") {
+    malla = agregarCuerpo(new THREE.BoxGeometry(2.7, 1.6, 1.5), c, "prisma");
+    vertices = [
+      [-1.35,-0.8,-0.75],[-1.35,-0.8,0.75],
+      [-1.35,0.8,-0.75],[-1.35,0.8,0.75],
+      [1.35,-0.8,-0.75],[1.35,-0.8,0.75],
+      [1.35,0.8,-0.75],[1.35,0.8,0.75]
+    ];
+  } else if (tipo === "piramide") {
+    const puntos = [
+      new THREE.Vector3(-1,-0.9,-1),
+      new THREE.Vector3(1,-0.9,-1),
+      new THREE.Vector3(1,-0.9,1),
+      new THREE.Vector3(-1,-0.9,1),
+      new THREE.Vector3(0,1.35,0)
+    ];
+    // Cuatro triángulos laterales y dos triángulos para la base.
+    const indices = [
+      0,1,4, 1,2,4, 2,3,4, 3,0,4,
+      0,2,1, 0,3,2
+    ];
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute("position", new THREE.Float32BufferAttribute(
+      puntos.flatMap(p => [p.x,p.y,p.z]), 3
+    ));
+    geo.setIndex(indices);
+    geo.computeVertexNormals();
+    malla = agregarCuerpo(geo, c, "piramide");
+    vertices = puntos.map(p => [p.x,p.y,p.z]);
+  } else if (tipo === "cilindro") {
+    malla = agregarCuerpo(
+      new THREE.CylinderGeometry(1, 1, 2.4, 32, 1, false), c, "cilindro"
+    );
+  } else if (tipo === "cono") {
+    malla = agregarCuerpo(
+      new THREE.ConeGeometry(1.15, 2.4, 32), c, "cono"
+    );
+    vertices = [[0,1.2,0]];
+  } else {
+    malla = agregarCuerpo(new THREE.SphereGeometry(1.25, 24, 16), c, "esfera");
+  }
+
+  agregarAristas(malla);
+  if (vertices.length) agregarPuntos(vertices);
+
+  // Restablece la vista para que cada cuerpo aparezca centrado.
+  giroX = -0.35;
+  giroY = 0.55;
+  distancia = 6;
+  actualizarVista();
+  actualizarContenido();
+  actualizarBotonesSelector();
+}
+
+function actualizarVista() {
+  grupo.rotation.x = giroX;
+  grupo.rotation.y = giroY;
+  camara.position.set(0, 0, distancia);
+  camara.lookAt(0, 0, 0);
+  renderer.render(escena, camara);
+}
+
+function actualizarContenido() {
+  const info = contenidos[tipoActual];
+  document.getElementById("nombreModelo").textContent = info.nombre;
+  document.getElementById("descripcion").textContent = info.descripcion;
+  document.getElementById("estado").textContent = "Modelo: " + info.nombre.toLowerCase();
+
+  const lista = document.getElementById("partes");
+  lista.replaceChildren();
+  info.partes.forEach(texto => {
+    const li = document.createElement("li");
+    li.textContent = texto;
+    lista.appendChild(li);
+  });
+
+  const datos = document.getElementById("datos");
+  datos.replaceChildren();
+  info.datos.forEach(texto => {
+    const div = document.createElement("div");
+    div.className = "dato";
+    div.textContent = texto;
+    datos.appendChild(div);
+  });
+
+  document.getElementById("panelPartes").hidden = !mostrarEtiquetas;
+  document.getElementById("etiquetas").textContent =
+    mostrarEtiquetas ? "Ocultar etiquetas" : "Mostrar etiquetas";
+  document.getElementById("etiquetas").classList.toggle("active", mostrarEtiquetas);
+  dibujarReto();
+}
+
+function actualizarBotonesSelector() {
+  document.querySelectorAll("#selector button").forEach(b => {
+    const activo = b.dataset.tipo === tipoActual;
+    b.classList.toggle("primary", activo);
+    b.setAttribute("aria-pressed", String(activo));
+  });
+}
+
+function actualizarCapas() {
+  grupo.traverse(obj => {
+    if (obj.name === "aristas") obj.visible = mostrarAristas;
+    if (obj.name === "vertice") obj.visible = mostrarVertices;
+  });
+  document.getElementById("aristas").textContent =
+    mostrarAristas ? "Ocultar aristas" : "Mostrar aristas";
+  document.getElementById("vertices").textContent =
+    mostrarVertices ? "Ocultar vértices" : "Mostrar vértices";
+  document.getElementById("aristas").classList.toggle("active", mostrarAristas);
+  document.getElementById("vertices").classList.toggle("active", mostrarVertices);
+  actualizarVista();
+}
+
+// Selector de modelos.
+document.getElementById("selector").addEventListener("click", e => {
+  const boton = e.target.closest("button[data-tipo]");
+  if (boton) crearModelo(boton.dataset.tipo);
+});
+
+// Botones de exploración.
+document.getElementById("etiquetas").addEventListener("click", () => {
+  mostrarEtiquetas = !mostrarEtiquetas;
+  actualizarContenido();
+});
+document.getElementById("aristas").addEventListener("click", () => {
+  mostrarAristas = !mostrarAristas;
+  actualizarCapas();
+});
+document.getElementById("vertices").addEventListener("click", () => {
+  mostrarVertices = !mostrarVertices;
+  actualizarCapas();
+});
+document.getElementById("rotar").addEventListener("click", e => {
+  giroAutomatico = !giroAutomatico;
+  e.currentTarget.textContent = giroAutomatico
+    ? "Detener giro automático" : "Activar giro automático";
+});
+document.getElementById("reiniciar").addEventListener("click", () => {
+  giroX = -0.35; giroY = 0.55; distancia = 6;
+  actualizarVista();
+});
+
+// Separación visual reversible: el modelo se desplaza ligeramente
+// y aumenta su tamaño para facilitar la observación de su volumen.
+document.getElementById("separar").addEventListener("click", e => {
+  separado = !separado;
+  grupo.scale.setScalar(separado ? 1.16 : 1);
+  grupo.position.y = separado ? 0.12 : 0;
+  e.currentTarget.textContent = separado ? "Volver a armar" : "Separar partes";
+  actualizarVista();
+});
+
+// Arrastre con mouse o dedo.
+renderer.domElement.addEventListener("pointerdown", e => {
+  arrastrando = true;
+  inicioX = e.clientX;
+  inicioY = e.clientY;
+  renderer.domElement.setPointerCapture(e.pointerId);
+});
+renderer.domElement.addEventListener("pointermove", e => {
+  if (!arrastrando) return;
+  giroY += (e.clientX - inicioX) * 0.009;
+  giroX += (e.clientY - inicioY) * 0.009;
+  giroX = Math.max(-1.5, Math.min(1.5, giroX));
+  inicioX = e.clientX;
+  inicioY = e.clientY;
+  actualizarVista();
+});
+function terminarArrastre() { arrastrando = false; }
+renderer.domElement.addEventListener("pointerup", terminarArrastre);
+renderer.domElement.addEventListener("pointercancel", terminarArrastre);
+
+// Acercar y alejar con la rueda del mouse.
+renderer.domElement.addEventListener("wheel", e => {
+  e.preventDefault();
+  distancia = Math.max(3.2, Math.min(10, distancia + e.deltaY * 0.008));
+  actualizarVista();
+}, { passive: false });
+
+// También admite pellizco con dos dedos.
+let distanciaDedos = 0;
+renderer.domElement.addEventListener("touchstart", e => {
+  if (e.touches.length === 2) {
+    distanciaDedos = Math.hypot(
+      e.touches[0].clientX - e.touches[1].clientX,
+      e.touches[0].clientY - e.touches[1].clientY
+    );
+  }
+}, { passive: true });
+renderer.domElement.addEventListener("touchmove", e => {
+  if (e.touches.length === 2 && distanciaDedos > 0) {
+    const nueva = Math.hypot(
+      e.touches[0].clientX - e.touches[1].clientX,
+      e.touches[0].clientY - e.touches[1].clientY
+    );
+    distancia = Math.max(3.2, Math.min(10, distancia + (distanciaDedos - nueva) * 0.015));
+    distanciaDedos = nueva;
+    actualizarVista();
+  }
+}, { passive: true });
+renderer.domElement.addEventListener("touchend", () => { distanciaDedos = 0; });
+
+// Mini reto con retroalimentación inmediata y puntuación.
+function dibujarReto() {
+  preguntasRespondidas = new Set();
+  aciertos = 0;
+  document.getElementById("resultadoReto").textContent = "";
+  const contenedor = document.getElementById("reto");
+  contenedor.replaceChildren();
+
+  contenidos[tipoActual].preguntas.forEach((pregunta, indice) => {
+    const bloque = document.createElement("div");
+    bloque.className = "pregunta";
+    const enunciado = document.createElement("p");
+    enunciado.textContent = (indice + 1) + ". " + pregunta.p;
+    bloque.appendChild(enunciado);
+
+    const opciones = document.createElement("div");
+    opciones.className = "opciones";
+    const feedback = document.createElement("p");
+    feedback.className = "feedback";
+    feedback.setAttribute("aria-live", "polite");
+
+    pregunta.o.forEach((opcion, i) => {
+      const boton = document.createElement("button");
+      boton.textContent = opcion;
+      boton.addEventListener("click", () => {
+        if (preguntasRespondidas.has(indice)) return;
+        preguntasRespondidas.add(indice);
+        opciones.querySelectorAll("button").forEach(b => b.disabled = true);
+
+        if (i === pregunta.r) {
+          aciertos++;
+          feedback.textContent = pregunta.bien;
+          feedback.className = "feedback correcto";
+        } else {
+          feedback.textContent = pregunta.mal;
+          feedback.className = "feedback error";
+        }
+        if (preguntasRespondidas.size === contenidos[tipoActual].preguntas.length) {
+          document.getElementById("resultadoReto").textContent =
+            "Resultado: " + aciertos + " de 3 respuestas correctas.";
+        }
+      });
+      opciones.appendChild(boton);
+    });
+
+    bloque.append(opciones, feedback);
+    contenedor.appendChild(bloque);
+  });
+}
+
+document.getElementById("reiniciarReto").addEventListener("click", dibujarReto);
+
+// Ajusta la escena cuando cambia el tamaño de la ventana.
+function ajustarTamano() {
+  const ancho = visor.clientWidth;
+  const alto = visor.clientHeight;
+  if (!ancho || !alto) return;
+  camara.aspect = ancho / alto;
+  camara.updateProjectionMatrix();
+  renderer.setSize(ancho, alto);
+  actualizarVista();
+}
+if ("ResizeObserver" in window) {
+  new ResizeObserver(ajustarTamano).observe(visor);
+} else {
+  window.addEventListener("resize", ajustarTamano);
+}
+
+// Giro suave, sin sonido. Se puede detener con el botón.
+function animar() {
+  requestAnimationFrame(animar);
+  if (giroAutomatico && !arrastrando) {
+    giroY += 0.003;
+    grupo.rotation.x = giroX;
+    grupo.rotation.y = giroY;
+  }
+  renderer.render(escena, camara);
+}
+
+// Inicio.
+crearModelo("cubo");
+animar();
+})();
+</script>
+</body>
+</html>
